@@ -10,7 +10,7 @@ $rates = [
 ];
 
 $amountFrom   = '';
-$amountTo     = '';
+$amountTo     = '0';
 $fromCurrency = 'USD';
 $toCurrency   = 'EUR';
 $error        = '';
