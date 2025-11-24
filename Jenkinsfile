@@ -27,6 +27,7 @@ pipeline {
         echo "done test1"
         echo "done test2"
         echo "done test3"
+        echo "done test4"
       }
     }
 
