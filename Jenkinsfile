@@ -1,4 +1,4 @@
-ter// Jenkinsfile used in this exercise — point the job at **your fork** of myapp6
+// Jenkinsfile used in this exercise — point the job at **your fork** of myapp6
 pipeline {
   agent any
 
