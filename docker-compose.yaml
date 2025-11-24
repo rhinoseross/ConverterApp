@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  ca-web:
+    build: .
+    volumes:
+      - ./site/:/var/www/html
+    ports:
+      - "81:80"
+
+  ca-db:
+    image: mysql
+    volumes:
+      - ./db_data/converterApp:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: 12345
+      MYSQL_DATABASE: converterApp
