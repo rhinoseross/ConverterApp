@@ -1,4 +1,4 @@
-// Jenkinsfile used in this exercise — point the job at **your fork** of myapp6
+ter// Jenkinsfile used in this exercise — point the job at **your fork** of myapp6
 pipeline {
   agent any
 
@@ -16,7 +16,7 @@ pipeline {
     stage('Pull , build and Run dockerfile ') {
       steps {
         sh '''
-          docker build -t rpgleonce/week7 .
+          docker build -t rpgleonce/converterApp .
           docker compose up -d
         '''
       }
