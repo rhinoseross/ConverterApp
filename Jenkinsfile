@@ -16,7 +16,7 @@ pipeline {
     stage('Pull , build and Run dockerfile ') {
       steps {
         sh '''
-          docker build -t rpgleonce/converterApp .
+          docker build -t rpgleonce/converterapp .
           docker compose up -d
         '''
       }
