@@ -1,39 +1,78 @@
-// Jenkinsfile used in this exercise — point the job at **your fork** of myapp6
 pipeline {
   agent any
 
   environment {
+    IMAGE_NAME = 'rpgleonce/converterapp-image'
     DOCKERHUB = credentials('DockerHub')
   }
 
   stages {
-    stage('Docker Login') {
+ stage('Docker Login') {
       steps {
         sh 'echo "$DOCKERHUB_PSW" | docker login -u "$DOCKERHUB_USR" --password-stdin'
       }
     }
-
-    stage('Pull , build and Run dockerfile ') {
+        stage('Build image') {
       steps {
         sh '''
-          docker build -t rpgleonce/converterapp-image .
-          docker compose up -d
+          docker build \
+            -t ${IMAGE_NAME}:${BUILD_NUMBER} \
+            -t ${IMAGE_NAME}:latest \
+            .
         '''
       }
     }
 
-    stage('Run Tests') {
+  stage('Smoke test') {
+  steps {
+    sh '''
+      # Clean up old container if it exists
+      docker rm -f converterapp-image-smoke || true
+
+      # Run container for smoke test (no ports exposed)
+      docker run -d --name converterapp-image-smoke ${IMAGE_NAME}:${BUILD_NUMBER}
+
+      # Give the app a moment to start
+      sleep 15
+
+      # Run curl from a *second* container that shares the same network namespace
+      set +e
+      docker run --rm \
+        --network container:converterapp-image-smoke \
+        curlimages/curl:8.9.0 \
+        -f http://localhost/ > /dev/null 2>&1
+      STATUS=$?
+      set -e
+
+      if [ "$STATUS" -ne 0 ]; then
+        echo "Smoke test FAILED, container logs:"
+        docker logs converterapp-image-smoke || true
+        docker rm -f converterapp-image-smoke || true
+        exit 1
+      fi
+
+      echo "Smoke test PASSED"
+      docker rm -f converterapp-image-smoke || true
+    '''
+  }
+}
+
+    stage('Push image') {
       steps {
-        echo "done test1"
-        echo "done test2"
-        echo "done test3"
-        echo "done test4"
+        sh '''
+          
+          docker push ${IMAGE_NAME}:latest
+        '''
       }
     }
 
-    stage('cleaning'){
-      steps{
-        sh 'docker compose down || true'
+    stage('Deploy') {
+      steps {
+        sh '''
+          docker compose down
+          docker compose pull
+          docker compose up -d
+        '''
       }
     }
   }
