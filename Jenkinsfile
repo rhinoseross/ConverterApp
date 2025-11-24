@@ -24,7 +24,8 @@ pipeline {
 
     stage('Run Tests') {
       steps {
-        echo "done testing"
+        echo "done test1"
+        echo "done test2"
       }
     }
 
