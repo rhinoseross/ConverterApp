@@ -4,6 +4,10 @@ pipeline {
   environment {
     IMAGE_NAME = 'rpgleonce/converterapp-image'
     DOCKERHUB = credentials('DockerHub')
+
+    EC2_HOST = 'ec2-13-220-191-62.compute-1.amazonaws.com'
+    EC2_USER = 'ec2-user'
+
   }
 
   stages {
@@ -66,14 +70,35 @@ pipeline {
       }
     }
 
-    stage('Deploy') {
-      steps {
-        sh '''
-          docker compose down
-          docker compose pull
-          docker compose up -d
-        '''
-      }
-    }
+    stage('Deploy to EC2') {
+            steps {
+                // *** USE EXACTLY THE ID FROM THE SNIPPET GENERATOR HERE ***
+                sshagent (credentials: ['EC2_SSH_CREDENTIALS']) {
+                    sh '''
+                        ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << 'EOF'
+# -------- Amazon Linux setup --------
+sudo yum update -y
+
+if ! command -v docker &> /dev/null
+then
+    if command -v amazon-linux-extras &> /dev/null; then
+        sudo amazon-linux-extras install docker -y
+    else
+        sudo yum install -y docker
+    fi
+    sudo systemctl start docker
+    sudo systemctl enable docker
+fi
+
+sudo docker pull rpgleonce/converterapp-image:latest
+sudo docker stop converterapp-container || true
+sudo docker rm converterapp-container || true
+sudo docker run -d --name converterapp-container -p 5000:80 rgleonce/converterapp-image:latest
+EOF
+                    '''
+                }
+            }
+        }
+
   }
 }
