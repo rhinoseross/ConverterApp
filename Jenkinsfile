@@ -72,7 +72,7 @@ pipeline {
 
     stage('Deploy to EC2') {
             steps {
-                sshagent (credentials: ['EC2_SSH_CREDENTIALS']) {
+                sshagent (credentials: ['EC2_CREDENTIALS']) {
                     sh '''
                         ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << 'EOF'
 # -------- Amazon Linux setup --------
