@@ -72,7 +72,6 @@ pipeline {
 
     stage('Deploy to EC2') {
             steps {
-                // *** USE EXACTLY THE ID FROM THE SNIPPET GENERATOR HERE ***
                 sshagent (credentials: ['EC2_SSH_CREDENTIALS']) {
                     sh '''
                         ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << 'EOF'
