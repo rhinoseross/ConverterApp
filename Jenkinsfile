@@ -89,16 +89,12 @@ then
     sudo systemctl enable docker
 fi
 
-steps {
-        sh 'echo "$DOCKERHUB_PSW" | docker login -u "$DOCKERHUB_USR" --password-stdin'
-      
-
+# -------- Deploy application --------
 sudo docker pull rpgleonce/converterapp-image:latest
 sudo docker stop converterapp-container || true
 sudo docker rm converterapp-container || true
-sudo docker run -d --name converterapp-container -p 5000:80 rgleonce/converterapp-image
+sudo docker run -d --name converterapp-container -p 5000:80 rpgleonce/converterapp-image
 
-}
 EOF
                     '''
                 }
