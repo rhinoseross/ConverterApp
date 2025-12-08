@@ -89,7 +89,7 @@ then
     sudo systemctl enable docker
 fi
 
-sudo docker pull rpgleonce/converterapp-image
+sudo docker pull rpgleonce/converterapp-image:latest
 sudo docker stop converterapp-container || true
 sudo docker rm converterapp-container || true
 sudo docker run -d --name converterapp-container -p 5000:80 rgleonce/converterapp-image
