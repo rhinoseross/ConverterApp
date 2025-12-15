@@ -40,11 +40,21 @@
         name: docker
         extra_args: --user
 
-    - name: Install AWS CLI (AL2023)
-      become: true
-      ansible.builtin.dnf:
-        name: awscli
-        state: present
+    - name: Read DB secret from Secrets Manager (controller only)
+      shell: aws secretsmanager get-secret-value \
+        --secret-id "converterapp/rds" \
+        --query SecretString \
+        --output text
+      register: secret_out
+      changed_when: false
+      delegate_to: localhost
+      run_once: true
+
+    - name: Parse DB secret
+      set_fact:
+        db_secret: "{{ secret_out.stdout | from_json }}"
+        db_password: "{{ (secret_out.stdout | from_json).password }}"
+      run_once: true
 
     - name: Login to Docker Hub
       community.docker.docker_login:
@@ -70,20 +80,6 @@
         name: "{{ container_name }}"
         state: absent
       ignore_errors: true
-
-    - name: Read DB secret from Secrets Manager
-      shell: >
-        aws secretsmanager get-secret-value
-        --secret-id "{{ db_secret_name }}"
-        --query SecretString
-        --output text
-      register: secret_out
-      changed_when: false
-
-    - name: Parse secret json
-      set_fact:
-        db_secret: "{{ secret_out.stdout | from_json }}"
-        db_password: "{{ (secret_out.stdout | from_json).password }}"
 
     - name: Run container (restart always)
       community.docker.docker_container:
