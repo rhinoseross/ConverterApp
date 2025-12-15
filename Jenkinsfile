@@ -5,18 +5,19 @@ pipeline {
     IMAGE_NAME = 'rpgleonce/converterapp-image'
     DOCKERHUB = credentials('DockerHub')
 
-    EC2_HOST = 'ec2-13-220-191-62.compute-1.amazonaws.com'
-    EC2_USER = 'ec2-user'
-
+    CONTROLLER_HOST = 'ec2-13-220-191-62.compute-1.amazonaws.com'
+    CONTROLLER_USER = 'ec2-user'
   }
 
   stages {
-  stage('Docker Build') {
+
+    stage('Docker Build') {
       steps {
         sh 'echo "$DOCKERHUB_PSW" | docker login -u "$DOCKERHUB_USR" --password-stdin'
       }
     }
-  stage('Build image') {
+
+    stage('Build image') {
       steps {
         sh '''
           docker build \
@@ -27,79 +28,99 @@ pipeline {
       }
     }
 
-  stage('Smoke test') {
-  steps {
-    sh '''
-      # Clean up old container if it exists
-      docker rm -f converterapp-image-smoke || true
+    stage('Smoke test') {
+      steps {
+        sh '''
+          docker rm -f converterapp-image-smoke || true
+          docker run -d --name converterapp-image-smoke ${IMAGE_NAME}:${BUILD_NUMBER}
+          sleep 15
 
-      # Run container for smoke test (no ports exposed)
-      docker run -d --name converterapp-image-smoke ${IMAGE_NAME}:${BUILD_NUMBER}
+          set +e
+          docker run --rm \
+            --network container:converterapp-image-smoke \
+            curlimages/curl:8.9.0 \
+            -f http://localhost/ > /dev/null 2>&1
+          STATUS=$?
+          set -e
 
-      # Give the app a moment to start
-      sleep 15
+          if [ "$STATUS" -ne 0 ]; then
+            docker logs converterapp-image-smoke || true
+            docker rm -f converterapp-image-smoke || true
+            exit 1
+          fi
 
-      # Run curl from a *second* container that shares the same network namespace
-      set +e
-      docker run --rm \
-        --network container:converterapp-image-smoke \
-        curlimages/curl:8.9.0 \
-        -f http://localhost/ > /dev/null 2>&1
-      STATUS=$?
-      set -e
-
-      if [ "$STATUS" -ne 0 ]; then
-        echo "Smoke test FAILED, container logs:"
-        docker logs converterapp-image-smoke || true
-        docker rm -f converterapp-image-smoke || true
-        exit 1
-      fi
-
-      echo "Smoke test PASSED"
-      docker rm -f converterapp-image-smoke || true
-    '''
-  }
-}
+          docker rm -f converterapp-image-smoke || true
+        '''
+      }
+    }
 
     stage('Push image') {
       steps {
         sh '''
-          
+          docker push ${IMAGE_NAME}:${BUILD_NUMBER}
           docker push ${IMAGE_NAME}:latest
         '''
       }
     }
 
-    stage('Deploy to EC2') {
-            steps {
-                sshagent (credentials: ['EC2_CREDENTIALS']) {
-                    sh '''
-                        ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << 'EOF'
-# -------- Amazon Linux setup --------
-sudo yum update -y
+    stage('Deploy to replicas (Ansible)') {
+      steps {
+        sshagent(credentials: ['EC2_CREDENTIALS']) {
+          withCredentials([
+            usernamePassword(
+              credentialsId: 'DockerHub',
+              usernameVariable: 'DH_USER',
+              passwordVariable: 'DH_TOKEN'
+            ),
+            sshUserPrivateKey(
+              credentialsId: 'EC2_CREDENTIALS',
+              keyFileVariable: 'REPLICA_KEY'
+            )
+          ]) {
+            sh '''
+              set -e
 
-if ! command -v docker &> /dev/null
-then
-    if command -v amazon-linux-extras &> /dev/null; then
-        sudo amazon-linux-extras install docker -y
-    else
-        sudo yum install -y docker
-    fi
-    sudo systemctl start docker
-    sudo systemctl enable docker
-fi
+              # Prepare controller
+              ssh -o StrictHostKeyChecking=no ${CONTROLLER_USER}@${CONTROLLER_HOST} \
+                'rm -rf ~/deploy/ansible && mkdir -p ~/deploy'
 
-# -------- Deploy application --------
-sudo docker pull rpgleonce/converterapp-image:latest
-sudo docker stop converterapp-container || true
-sudo docker rm converterapp-container || true
-sudo docker run -d --name converterapp-container -p 5000:80 rpgleonce/converterapp-image
+              # Copy Ansible files
+              scp -o StrictHostKeyChecking=no -r ansible \
+                ${CONTROLLER_USER}@${CONTROLLER_HOST}:~/deploy/
 
-EOF
-                    '''
-                }
-            }
+              # Copy PEM key for controller -> replicas SSH
+              scp -o StrictHostKeyChecking=no "$REPLICA_KEY" \
+                ${CONTROLLER_USER}@${CONTROLLER_HOST}:~/deploy/ansible/webserver2.pem
+
+              # Run Ansible on controller
+              ssh -o StrictHostKeyChecking=no ${CONTROLLER_USER}@${CONTROLLER_HOST} << EOF
+                set -e
+                cd ~/deploy/ansible
+                chmod 400 webserver2.pem
+
+                # Install Ansible if missing
+                if ! command -v ansible-playbook >/dev/null 2>&1; then
+                  sudo yum -y install python3
+                  python3 -m pip install --user ansible boto3 botocore
+                fi
+                export PATH=\$PATH:\$HOME/.local/bin
+
+                # Docker Ansible collection
+                ansible-galaxy collection install community.docker --force
+
+                # ---- EXPORT CREDS AS ENV VARS (KEY CHANGE) ----
+                export DOCKERHUB_USER='${DH_USER}'
+                export DOCKERHUB_PASS='${DH_TOKEN}'
+
+                ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook \
+                  -i inventory.ini deploy.yml \
+                  -e app_image=${IMAGE_NAME}:${BUILD_NUMBER}
+              EOF
+            '''
+          }
         }
+      }
+    }
 
   }
 }

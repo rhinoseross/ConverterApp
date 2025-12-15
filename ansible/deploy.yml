@@ -1,0 +1,74 @@
+---
+- name: Deploy ConverterApp to replicas (pull + run)
+  hosts: replicas
+  become: true
+  gather_facts: true
+  serial: 1   # rolling deploy: one replica at a time
+
+  vars:
+    app_image: "{{ app_image | default('rpgleonce/converterapp-image:latest') }}"
+    container_name: "converterapp-container"
+    host_port: 5000
+    container_port: 80
+    dockerhub_user: "{{ lookup('env', 'DOCKERHUB_USER') }}"
+    dockerhub_pass: "{{ lookup('env', 'DOCKERHUB_PASS') }}"
+
+
+  tasks:
+    - name: Install Docker (Amazon Linux / RHEL family)
+      ansible.builtin.yum:
+        name: docker
+        state: present
+
+    - name: Start and enable Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Install Python Docker SDK
+      ansible.builtin.pip:
+        name: docker
+
+    - name: Login to Docker Hub (for private repos)
+      community.docker.docker_login:
+        username: "{{ dockerhub_user }}"
+        password: "{{ dockerhub_pass }}"
+      when:
+        - dockerhub_user | length > 0
+        - dockerhub_pass | length > 0
+
+    - name: Pull the application image
+      community.docker.docker_image:
+        name: "{{ app_image }}"
+        source: pull
+
+    - name: Stop old container if running
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        state: stopped
+      ignore_errors: true
+
+    - name: Remove old container if present
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        state: absent
+      ignore_errors: true
+
+    - name: Run container (restart always)
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        image: "{{ app_image }}"
+        state: started
+        restart_policy: always
+        published_ports:
+          - "{{ host_port }}:{{ container_port }}"
+
+    - name: Basic health check (HTTP 200 expected)
+      ansible.builtin.uri:
+        url: "http://localhost:{{ host_port }}/"
+        status_code: 200
+      register: health
+      retries: 10
+      delay: 3
+      until: health.status == 200
