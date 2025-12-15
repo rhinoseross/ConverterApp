@@ -110,5 +110,5 @@
         env:
           DB_HOST: "converterapp-db.c8h0syswkbi9.us-east-1.rds.amazonaws.com"
           DB_NAME: "converterApp"
-          DB_USER: "converteruser"
+          DB_USER: "admin"
           DB_PASS: "{{ db_password }}"
