@@ -13,6 +13,10 @@
     container_port: 80
     dockerhub_user: "{{ lookup('env', 'DOCKERHUB_USER') }}"
     dockerhub_pass: "{{ lookup('env', 'DOCKERHUB_PASS') }}"
+    db_secret_name: "{{ lookup('env','DB_SECRET_NAME') | default('converterapp/rds', true) }}"
+    db_host: "converterapp-db.c8h0syswkbi9.us-east-1.rds.amazonaws.com"
+    db_user: "admin"
+    db_name: "converterApp"
 
   tasks:
     - name: Install Docker (Amazon Linux / RHEL family)
@@ -61,6 +65,20 @@
         name: "{{ container_name }}"
         state: absent
       ignore_errors: true
+
+    - name: Read DB secret from Secrets Manager
+      shell: >
+        aws secretsmanager get-secret-value
+        --secret-id "{{ db_secret_name }}"
+        --query SecretString
+        --output text
+      register: secret_out
+      changed_when: false
+
+    - name: Parse secret json
+      set_fact:
+        db_secret: "{{ secret_out.stdout | from_json }}"
+        db_password: "{{ (secret_out.stdout | from_json).password }}"
 
     - name: Run container (restart always)
       community.docker.docker_container:
