@@ -7,13 +7,8 @@ services:
       - ./site/:/var/www/html
     ports:
       - "5000:80"
-
-  ca-db:
-    image: mysql
-    volumes:
-      - ./db_data/converterApp:/var/lib/mysql
-    ports:
-      - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: 12345
-      MYSQL_DATABASE: converterApp
+      DB_HOST: converterapp-db.xxxxx.us-east-1.rds.amazonaws.com
+      DB_NAME: converterApp
+      DB_USER: converteruser
+      DB_PASS: your_db_password

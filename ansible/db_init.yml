@@ -1,0 +1,68 @@
+---
+- name: Initialize RDS schema once (idempotent)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: true
+
+  vars:
+    db_secret_name: "{{ lookup('env', 'DB_SECRET_NAME') | default('converterapp/rds', true) }}"
+    schema_path: "{{ playbook_dir }}/db-init/schema.sql"
+
+  tasks:
+    - name: Ensure MySQL client is installed (dnf/yum)
+      ansible.builtin.shell: |
+        set -e
+        if command -v mysql >/dev/null 2>&1; then exit 0; fi
+        (sudo dnf -y install mariadb105 >/dev/null 2>&1) || \
+        (sudo dnf -y install mariadb >/dev/null 2>&1) || \
+        (sudo yum -y install mariadb >/dev/null 2>&1)
+      args:
+        executable: /bin/bash
+
+    - name: Read secret JSON from AWS Secrets Manager
+      ansible.builtin.command: >
+        aws secretsmanager get-secret-value
+        --secret-id {{ db_secret_name }}
+        --query SecretString
+        --output text
+      register: secret_out
+      changed_when: false
+
+    - name: Parse secret JSON
+      ansible.builtin.set_fact:
+        db_secret: "{{ secret_out.stdout | from_json }}"
+
+    - name: Set DB connection vars
+      ansible.builtin.set_fact:
+        db_host: "{{ db_secret.host }}"
+        db_port: "{{ (db_secret.port | default(3306)) | string }}"
+        db_name: "{{ db_secret.dbname | default('converterApp') }}"
+        db_user: "{{ db_secret.username }}"
+        db_pass: "{{ db_secret.password }}"
+
+    - name: Check if fx_rates table exists (determines if init is needed)
+      ansible.builtin.shell: |
+        set -e
+        mysql --protocol=tcp --connect-timeout=5 \
+          -h "{{ db_host }}" -P "{{ db_port }}" -u "{{ db_user }}" \
+          -e "SELECT 1 FROM information_schema.tables WHERE table_schema='{{ db_name }}' AND table_name='fx_rates' LIMIT 1;" \
+          2>/dev/null | tail -n +2
+      args:
+        executable: /bin/bash
+      environment:
+        MYSQL_PWD: "{{ db_pass }}"
+      register: fx_check
+      changed_when: false
+      failed_when: false
+
+    - name: Initialize schema (only if fx_rates is missing)
+      ansible.builtin.shell: |
+        set -e
+        mysql --protocol=tcp --connect-timeout=5 \
+          -h "{{ db_host }}" -P "{{ db_port }}" -u "{{ db_user }}" < "{{ schema_path }}"
+      args:
+        executable: /bin/bash
+      environment:
+        MYSQL_PWD: "{{ db_pass }}"
+      when: fx_check.stdout | trim == ""

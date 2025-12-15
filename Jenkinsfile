@@ -65,7 +65,7 @@ pipeline {
       }
     }
 
-    stage('Deploy to replicas (Ansible)') {
+    stage('DB init + Deploy to replicas (Ansible)') {
       steps {
         sshagent(credentials: ['EC2_CREDENTIALS']) {
           withCredentials([
@@ -86,7 +86,7 @@ pipeline {
               ssh -o StrictHostKeyChecking=no ${CONTROLLER_USER}@${CONTROLLER_HOST} \
                 'rm -rf ~/deploy/ansible && mkdir -p ~/deploy'
 
-              # Copy Ansible files
+              # Copy Ansible files (including db_init.yml and db-init/schema.sql)
               scp -o StrictHostKeyChecking=no -r ansible \
                 ${CONTROLLER_USER}@${CONTROLLER_HOST}:~/deploy/
 
@@ -100,21 +100,35 @@ pipeline {
                 cd ~/deploy/ansible
                 chmod 400 webserver2.pem
 
-                # Install Ansible if missing (Amazon Linux 2023 uses dnf, fall back to yum)
-                if ! command -v ansible-playbook >/dev/null 2>&1; then
+                # Install prerequisites if missing
+                if ! command -v python3 >/dev/null 2>&1; then
                   (sudo dnf -y install python3 || sudo yum -y install python3)
+                fi
+                if ! command -v pip3 >/dev/null 2>&1; then
+                  (sudo dnf -y install python3-pip || sudo yum -y install python3-pip)
+                fi
+                if ! command -v ansible-playbook >/dev/null 2>&1; then
                   python3 -m pip install --user ansible boto3 botocore
                 fi
+                export PATH=\$PATH:\$HOME/.local/bin
 
-                export PATH=\\$PATH:\\$HOME/.local/bin
+                # Ensure AWS CLI exists (db_init.yml uses it)
+                if ! command -v aws >/dev/null 2>&1; then
+                  (sudo dnf -y install awscli || sudo yum -y install awscli)
+                fi
 
-                # Docker Ansible collection
+                # Collections (deploy uses community.docker; db_init uses only aws cli)
                 ansible-galaxy collection install community.docker --force
 
                 # Pass DockerHub creds via environment (used by lookup(\"env\", ...) in deploy.yml)
                 export DOCKERHUB_USER="${DH_USER}"
                 export DOCKERHUB_PASS="${DH_TOKEN}"
 
+                # ---- ONE-TIME DB INIT (idempotent) ----
+                export DB_SECRET_NAME="converterapp/rds"
+                ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i "localhost," db_init.yml
+
+                # ---- DEPLOY APP TO REPLICAS ----
                 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook \
                   -i inventory.ini deploy.yml \
                   -e app_image=${IMAGE_NAME}:${BUILD_NUMBER}
@@ -124,6 +138,6 @@ pipeline {
         }
       }
     }
-    
+
   }
 }

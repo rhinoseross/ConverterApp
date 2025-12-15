@@ -14,7 +14,6 @@
     dockerhub_user: "{{ lookup('env', 'DOCKERHUB_USER') }}"
     dockerhub_pass: "{{ lookup('env', 'DOCKERHUB_PASS') }}"
 
-
   tasks:
     - name: Install Docker (Amazon Linux / RHEL family)
       ansible.builtin.yum:
@@ -80,3 +79,17 @@
       retries: 10
       delay: 3
       until: health.status == 200
+
+    - name: Run container (restart always)
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        image: "{{ app_image }}"
+        state: started
+        restart_policy: always
+        published_ports:
+          - "{{ host_port }}:{{ container_port }}"
+        env:
+          DB_HOST: "rgl-converterapp-db.c8h0syswkbi9.us-east-1.rds.amazonaws.com"
+          DB_NAME: "converterApp"
+          DB_USER: "converteruser"
+          DB_PASS: "{{ db_password }}"
