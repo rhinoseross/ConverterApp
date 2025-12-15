@@ -108,7 +108,7 @@
         published_ports:
           - "{{ host_port }}:{{ container_port }}"
         env:
-          DB_HOST: "rgl-converterapp-db.c8h0syswkbi9.us-east-1.rds.amazonaws.com"
+          DB_HOST: "converterapp-db.c8h0syswkbi9.us-east-1.rds.amazonaws.com"
           DB_NAME: "converterApp"
           DB_USER: "converteruser"
           DB_PASS: "{{ db_password }}"
