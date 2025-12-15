@@ -34,8 +34,8 @@
 
     - name: Install Python Docker SDK (user site to avoid rpm conflicts)
       ansible.builtin.pip:
-      name: docker
-      extra_args: --user
+        name: docker
+        extra_args: --user
 
 
     - name: Login to Docker Hub
