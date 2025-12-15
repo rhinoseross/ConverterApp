@@ -5,7 +5,7 @@ pipeline {
     IMAGE_NAME = 'rpgleonce/converterapp-image'
     DOCKERHUB = credentials('DockerHub')
 
-    CONTROLLER_HOST = 'ec2-13-222-44-61.compute-1.amazonaws.com'
+    CONTROLLER_HOST = 'ec2-44-223-44-73.compute-1.amazonaws.com'
     CONTROLLER_USER = 'ec2-user'
   }
 
