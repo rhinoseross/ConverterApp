@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/db.php';
 
-// ----- CONFIG: simple relative exchange rates (base = 1 USD) -----
+/*// ----- CONFIG: simple relative exchange rates (base = 1 USD) -----
 $rates = [
     'USD' => 1.0,
     'EUR' => 0.92,
@@ -9,7 +9,14 @@ $rates = [
     'JPY' => 155.40,
     'CAD' => 1.37,
     'AUD' => 1.52
-];
+];*/
+
+try {
+    $rates = db_get_rates_cached(300); // or db_get_rates() if you don’t want caching yet
+} catch (Throwable $e) {
+    $rates = []; // so dropdowns don’t explode
+    $error = "Could not load exchange rates from DB: " . $e->getMessage();
+}
 
 $amountFrom   = '';
 $amountTo     = '0';

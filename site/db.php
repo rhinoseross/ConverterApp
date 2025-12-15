@@ -3,7 +3,6 @@
 /**
  * db.php
  * Central place for DB configuration + connection helpers.
- * (We’ll later swap this to pull from AWS Secrets Manager or whatever you decide.)
  */
 
 function db_env(string $key, ?string $default = null): ?string {
@@ -31,7 +30,7 @@ function db_pdo(): PDO {
 }
 
 /**
- * Returns a small HTML string you can render in the UI.
+ * Returns a small HTML string to render in the UI.
  * Checks basic connectivity and whether a given table exists.
  */
 function db_status_message(string $table = 'conversions'): string {
@@ -49,4 +48,49 @@ function db_status_message(string $table = 'conversions'): string {
     } catch (Throwable $e) {
         return "<span class='bad'>Database connection failed: " . htmlspecialchars($e->getMessage()) . "</span>";
     }
+}
+
+/**
+ * Fetch exchange rates from DB.
+ * Expects a table:
+ *   fx_rates(currency_code CHAR(3) PRIMARY KEY, rate_to_usd DECIMAL(...))
+ *
+ * Returns: ['USD' => 1.0, 'EUR' => 0.92, ...]
+ */
+function db_get_rates(): array {
+    $pdo = db_pdo();
+
+    $stmt = $pdo->query("SELECT currency_code, rate_to_usd FROM fx_rates");
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $rates = [];
+    foreach ($rows as $r) {
+        $code = strtoupper((string)$r['currency_code']);
+        $rates[$code] = (float)$r['rate_to_usd'];
+    }
+
+    // Ensure base exists
+    if (!isset($rates['USD'])) {
+        $rates['USD'] = 1.0;
+    }
+
+    return $rates;
+}
+
+/**
+ * Simple in-request cache to avoid repeated DB reads if called multiple times.
+ * Note: This cache is per PHP request (not shared across requests).
+ */
+function db_get_rates_cached(int $ttlSeconds = 60): array {
+    static $cache = null;
+    static $cachedAt = 0;
+
+    $now = time();
+    if ($cache !== null && ($now - $cachedAt) < $ttlSeconds) {
+        return $cache;
+    }
+
+    $cache = db_get_rates();
+    $cachedAt = $now;
+    return $cache;
 }
