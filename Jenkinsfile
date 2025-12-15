@@ -77,7 +77,7 @@ pipeline {
               keyFileVariable: 'REPLICA_KEY'
             )
           ]) {
-            sh '''
+            sh """
               set -e
 
               # Prepare controller
@@ -89,38 +89,39 @@ pipeline {
                 ${CONTROLLER_USER}@${CONTROLLER_HOST}:~/deploy/
 
               # Copy PEM key for controller -> replicas SSH
-              scp -o StrictHostKeyChecking=no "$REPLICA_KEY" \
+              scp -o StrictHostKeyChecking=no "${REPLICA_KEY}" \
                 ${CONTROLLER_USER}@${CONTROLLER_HOST}:~/deploy/ansible/webserver2.pem
 
-              # Run Ansible on controller
-              ssh -o StrictHostKeyChecking=no ${CONTROLLER_USER}@${CONTROLLER_HOST} << EOF
+              # Run Ansible on controller (no heredoc to avoid EOF issues)
+              ssh -o StrictHostKeyChecking=no ${CONTROLLER_USER}@${CONTROLLER_HOST} '
                 set -e
                 cd ~/deploy/ansible
                 chmod 400 webserver2.pem
 
-                # Install Ansible if missing
+                # Install Ansible if missing (Amazon Linux 2023 uses dnf, fall back to yum)
                 if ! command -v ansible-playbook >/dev/null 2>&1; then
-                  sudo yum -y install python3
+                  (sudo dnf -y install python3 || sudo yum -y install python3)
                   python3 -m pip install --user ansible boto3 botocore
                 fi
-                export PATH=\$PATH:\$HOME/.local/bin
+
+                export PATH=\\$PATH:\\$HOME/.local/bin
 
                 # Docker Ansible collection
                 ansible-galaxy collection install community.docker --force
 
-                # ---- EXPORT CREDS AS ENV VARS (KEY CHANGE) ----
-                export DOCKERHUB_USER='${DH_USER}'
-                export DOCKERHUB_PASS='${DH_TOKEN}'
+                # Pass DockerHub creds via environment (used by lookup(\"env\", ...) in deploy.yml)
+                export DOCKERHUB_USER="${DH_USER}"
+                export DOCKERHUB_PASS="${DH_TOKEN}"
 
                 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook \
                   -i inventory.ini deploy.yml \
                   -e app_image=${IMAGE_NAME}:${BUILD_NUMBER}
-              EOF
-            '''
+              '
+            """
           }
         }
       }
     }
-
+    
   }
 }
