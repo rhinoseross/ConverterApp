@@ -6,7 +6,7 @@ services:
     volumes:
       - ./site/:/var/www/html
     ports:
-      - "81:80"
+      - "5000:80"
 
   ca-db:
     image: mysql
