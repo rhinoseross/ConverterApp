@@ -126,7 +126,7 @@ EOF
 
               # Prepare controller
               ssh -o StrictHostKeyChecking=no ${CONTROLLER_USER}@${CONTROLLER_HOST} \
-                'rm -rf ~~/ansible-setup && mkdir -p ~/ansible-setup'
+                'rm -rf ~/ansible-setup && mkdir -p ~/ansible-setup'
 
               # Copy Ansible files (including db_init.yml and db-init/schema.sql)
               scp -o StrictHostKeyChecking=no -r ansible \
