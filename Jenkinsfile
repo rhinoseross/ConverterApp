@@ -124,25 +124,25 @@ EOF
             sh """
               set -e
 
-              # Prepare controller (FIXED: remove ~~ typo)
-              ssh -o StrictHostKeyChecking=no ${CONTROLLER_USER}@${CONTROLLER_HOST} \\
-                'rm -rf ~/ansible-setup && mkdir -p ~/ansible-setup'
+              # Prepare controller
+              ssh -o StrictHostKeyChecking=no ${CONTROLLER_USER}@${CONTROLLER_HOST} \
+                'rm -rf ~~/ansible-setup && mkdir -p ~/ansible-setup'
 
-              # Copy Ansible files
-              scp -o StrictHostKeyChecking=no -r ansible \\
+              # Copy Ansible files (including db_init.yml and db-init/schema.sql)
+              scp -o StrictHostKeyChecking=no -r ansible \
                 ${CONTROLLER_USER}@${CONTROLLER_HOST}:~/ansible-setup/
 
               # Copy PEM key for controller -> replicas SSH
-              scp -o StrictHostKeyChecking=no "${REPLICA_KEY}" \\
+              scp -o StrictHostKeyChecking=no "${REPLICA_KEY}" \
                 ${CONTROLLER_USER}@${CONTROLLER_HOST}:~/ansible-setup/webserver2.pem
 
-              # Run Ansible on controller
-              # IMPORTANT: use double-quotes so Jenkins env values expand locally before sending
-              ssh -o StrictHostKeyChecking=no ${CONTROLLER_USER}@${CONTROLLER_HOST} "
+              # Run Ansible on controller (no heredoc to avoid EOF issues)
+              ssh -o StrictHostKeyChecking=no ${CONTROLLER_USER}@${CONTROLLER_HOST} '
                 set -e
                 cd ~/ansible-setup
                 chmod 400 webserver2.pem
 
+                # Install prerequisites if missing
                 if ! command -v python3 >/dev/null 2>&1; then
                   (sudo dnf -y install python3 || sudo yum -y install python3)
                 fi
@@ -152,24 +152,29 @@ EOF
                 if ! command -v ansible-playbook >/dev/null 2>&1; then
                   python3 -m pip install --user ansible boto3 botocore
                 fi
-                export PATH=\\$PATH:\\$HOME/.local/bin
+                export PATH=\$PATH:\$HOME/.local/bin
 
+                # Ensure AWS CLI exists (db_init.yml uses it)
                 if ! command -v aws >/dev/null 2>&1; then
                   (sudo dnf -y install awscli || sudo yum -y install awscli)
                 fi
 
+                # Collections (deploy uses community.docker; db_init uses only aws cli)
                 ansible-galaxy collection install community.docker --force
 
-                export DOCKERHUB_USER='${DH_USER}'
-                export DOCKERHUB_PASS='${DH_TOKEN}'
+                # Pass DockerHub creds via environment (used by lookup(\"env\", ...) in deploy.yml)
+                export DOCKERHUB_USER="${DH_USER}"
+                export DOCKERHUB_PASS="${DH_TOKEN}"
 
-                export DB_SECRET_NAME='converterapp/rds'
+                # ---- ONE-TIME DB INIT (idempotent) ----
+                export DB_SECRET_NAME="converterapp/rds"
                 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory.ini db_init.yml
 
-                ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook \\
-                  -i inventory.ini deploy.yml \\
-                  -e app_image='${IMAGE_NAME}:${BUILD_NUMBER}'
-              "
+                # ---- DEPLOY APP TO REPLICAS ----
+                ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook \
+                  -i inventory.ini deploy.yml \
+                  -e app_image=${IMAGE_NAME}:${BUILD_NUMBER}
+              '
             """
           }
         }
