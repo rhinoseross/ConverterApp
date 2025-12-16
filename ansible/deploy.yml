@@ -89,6 +89,11 @@
         restart_policy: always
         published_ports:
           - "{{ host_port }}:{{ container_port }}"
+        env:
+          DB_HOST: "converterapp-db.c8h0syswkbi9.us-east-1.rds.amazonaws.com"
+          DB_NAME: "converterApp"
+          DB_USER: "admin"
+          DB_PASS: "{{ db_password }}"
 
     - name: Basic health check (HTTP 200 expected)
       ansible.builtin.uri:
@@ -98,17 +103,3 @@
       retries: 10
       delay: 3
       until: health.status == 200
-
-    - name: Run container (restart always)
-      community.docker.docker_container:
-        name: "{{ container_name }}"
-        image: "{{ app_image }}"
-        state: started
-        restart_policy: always
-        published_ports:
-          - "{{ host_port }}:{{ container_port }}"
-        env:
-          DB_HOST: "converterapp-db.c8h0syswkbi9.us-east-1.rds.amazonaws.com"
-          DB_NAME: "converterApp"
-          DB_USER: "admin"
-          DB_PASS: "{{ db_password }}"
