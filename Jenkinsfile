@@ -172,10 +172,10 @@ EOF
 
                 # ---- ONE-TIME DB INIT (idempotent) ----
                 export DB_SECRET_NAME="converterapp/rds"
-                ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory.ini db_init.yml
+                ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook/ansible -i inventory.ini db_init.yml
 
                 # ---- DEPLOY APP TO REPLICAS ----
-                ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook \
+                ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook/ansible \
                   -i inventory.ini deploy.yml \
                   -e app_image=${IMAGE_NAME}:${BUILD_NUMBER}
               '
